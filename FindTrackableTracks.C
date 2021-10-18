@@ -1,77 +1,97 @@
+using MFTCluster = o2::BaseCluster<float>;
+using MFTTrack = o2::mft::TrackMFT;
+o2::itsmft::ChipMappingMFT mftChipMapper;
+std::vector<MFTTrack> mMFTTracks;
+std::vector<MFTCluster> mMFTClusters;
+std::vector<int> mtrackExtClsIDs;
+
+void FindTrackableTracks()
+{
+
+  using o2::itsmft::CompClusterExt;
+
+  constexpr float DefClusErrorRow = 26.88e-4 * 0.5;
+  constexpr float DefClusErrorCol = 29.24e-4 * 0.5;
+  constexpr float DefClusError2Row = DefClusErrorRow * DefClusErrorRow;
+  constexpr float DefClusError2Col = DefClusErrorCol * DefClusErrorCol;
+
+  // Geometry and matrix transformations
+  std::string inputGeom = "o2sim_geometry.root";
+  o2::base::GeometryManager::loadGeometry(inputGeom);
+  auto gman = o2::mft::GeometryTGeo::Instance();
+  gman->fillMatrixCache(
+    o2::math_utils::bit2Mask(o2::math_utils::TransformType::L2G));
+
+  // Cluster pattern dictionary
+  std::string dictfile = "MFTdictionary.bin";
+  o2::itsmft::TopologyDictionary dict;
+  std::ifstream file(dictfile.c_str());
+  if (file.good()) {
+    printf("Running with dictionary: %s \n", dictfile.c_str());
+    dict.readBinaryFile(dictfile);
+  } else {
+    printf("Can not run without dictionary !\n");
+    return;
+  }
+
+
+  
+  int nMFTTrackable;
+  TFile fileC("~/Documents/DOCTORAT/simpp_10Ev_2/mftclusters.root");
+  TTree* clsTree = (TTree*)fileC.Get("o2sim");
+  std::vector<CompClusterExt> clsVec, *clsVecP = &clsVec;
+  clsTree->SetBranchAddress("MFTClusterComp", &clsVecP);
+
+  o2::dataformats::MCTruthContainer<o2::MCCompLabel>* clsLabels = nullptr; // This goes to global variables
+    if (clsTree->GetBranch("MFTClusterMCTruth"))
+    { // This goes to LoadClusters
+      clsTree->SetBranchAddress("MFTClusterMCTruth", &clsLabels);
+    }
+    else
+    {
+      printf("No Monte-Carlo information in this file\n");
+      return;
+    }
+    //clsLabel.get(trkID, evnID, srcID, fake);
+
+  int nEntries = clsTree->GetEntries();
+  printf("Number of entries in clusters tree %d \n", nEntries);
 
   clsTree -> GetEntry(0);//clsTree instead
   int nClusters = (int)clsVec.size(); // Number of mft hits in this event --NEEDS TO BE THE NB OF CLUSTERS
-  //std::cout << "Event " << event << " has " << eventHeader->getMCEventStats().getNKeptTracks() << " tracks and " << nMFTHits << " hits\n";
+    //std::cout << "Event " << event << " has " << eventHeader->getMCEventStats().getNKeptTracks() << " tracks and " << nMFTHits << " hits\n";
 
-  std::vector<trackHasHitsinMFTDisks> mcTrackHasHitsInMFTDisks(eventHeader->getMCEventStats().getNKeptTracks(),{0,0,0,0,0}); //
-
-  std::cout << "Loop over " << nClusters << " mftclusters to identify trackable MFT tracks in event " <<  event << std::endl;
-  for (Int_t n_clus=0 ; n_clus < nClusters; n_clus++) { // Loop over mftclusters to identify trackable tracks
-    o2::MCCompLabel* clusp = &(*clsLabels).at(n_clus); //PAS SURE DE CETTE LIGNE NOTAMMENT LE DEBUT
-    Int_t trID = clusp->getTrackID(); // ID of the tracks having given the cluster
-    //std::cout << "n_clus = " << n_clus << " ** trID = " << trID << std::endl;
-
-    Float_t z = clusp->GetZ(); // Z position of the cluster => Identify MFT disk WE NEED THE POSITION OF THE CLUSTER
-    mcTrackHasHitsInMFTDisks[trID][mftChipMapper.chip2Layer(clusp->GetDetectorID())/2] = true;
+    int trkID=0, evnID=0, srcID=0;
+    bool fake= false;
+    //std::vector<std::vector<int>> mcLabelHasClustersInMFTDisks(nClusters,{0,0,0,0,0});//taille ?
 
 
-    std::vector<std::vector<int>> mcLabelHasClustersInMFTDisks(,{0,0,0,0,0});//taille ?
 
-    static constexpr std::array<int, NChips> ChipID2Layer{
-    0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-    4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4,
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6,
-    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 6, 6, 6, 6,
-    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
-    6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
-    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8,
-    8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
-    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
-    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8, 8, 8, 8, 8, 8,
-    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
-    9, 9, 9, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4,
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 6,
-    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
-    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
-    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8,
-    8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
-    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9,
-    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8, 8, 8,
-    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
-    9, 9, 9, 9, 9};
+      for (int icls = 0; icls < nClusters; ++icls)
+      {
+        auto clsEntry = icls;//? oui ?
+        auto cluster = clsVec[clsEntry];
+        auto& clsLabel = (clsLabels->getLabels(clsEntry))[0];//1er label seulement ?? faire une boucle sur les labels ?
+        clsLabel.get(trkID, evnID, srcID, fake);
+        printf("###########################################label = %llu, trackID = %d\n", clsLabel.getRawValue(), trkID);
+        auto clsLayer =  mftChipMapper.chip2Layer(cluster.getChipID());
+        int clsMFTdiskID = clsLayer/2; //entier pour root
+        //mcLabelHasClustersInMFTDisks[clsLabel][clsMFTdiskID]=true;
 
+      }
 
-    for (int icls = 0; icls < nClusters; ++icls)
-    {
-      auto clsEntry = icls;//? oui ?
-      auto cluster = clsVec[clsEntry];
-      auto& clsLabel = (clsLabels->getLabels(clsEntry))[0];//1er label seulement ?? faire une boucle sur les labels ?
-      auto clsLayer = ChipID2Layer[cluster.getChipID()];
-      auto clsMFTdiskID = int(clsLayer/2);
-      mcLabelHasClustersInMFTDisks[clsLabel][clsMFTdiskID]=true;
-
-    }
-
-    for (auto& clabel : clsLabels) // sur tous les MCLabel A REVOIR
-    {
-      int nMFTDisksHasHits = 0;//has clusters instead of hits now
-        for(auto disk: {0,1,2,3,4}) nMFTDisksHasHits+= int(mcLabelHasClustersInMFTDisks[clsMCLabel][disk]);
-        if(nMFTDisksHasHits>=4)
-        {   //Track is trackable if has left hits on at least 4 disks
-          nMFTTrackable++;
-          MFTTrackablesEtaZ->Fill(z,eta);
-          TrackablepT->Fill(pt);
-          Trackablep->Fill(p);
-          TrackableEta->Fill(eta);
-        }
-    }
+      /*for (auto& clabel : clsLabels) // sur tous les MCLabel A REVOIR
+      {
+        int nMFTDisksHasHits = 0;//has clusters instead of hits now
+          for(auto disk: {0,1,2,3,4}) nMFTDisksHasHits+= int(mcLabelHasClustersInMFTDisks[clabel][disk]);
+          if(nMFTDisksHasHits>=4)
+          {   //Track is trackable if has left hits on at least 4 disks
+            nMFTTrackable++;
+            std::cout << "So far we have " << nMFTTrackable << " mftlabels identifying trackable MFT tracks " << std::endl;
+            MFTTrackablesEtaZ->Fill(z,eta);
+            TrackablepT->Fill(pt);
+            Trackablep->Fill(p);
+            TrackableEta->Fill(eta);
+          }
+      }*/
+}
