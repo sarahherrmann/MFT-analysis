@@ -35,7 +35,7 @@ void FindTrackableTracks()
   }
 
 
-  
+
   int nMFTTrackable;
   TFile fileC("~/Documents/DOCTORAT/simpp_10Ev_2/mftclusters.root");
   TTree* clsTree = (TTree*)fileC.Get("o2sim");
@@ -60,11 +60,13 @@ void FindTrackableTracks()
   clsTree -> GetEntry(0);//clsTree instead
   int nClusters = (int)clsVec.size(); // Number of mft hits in this event --NEEDS TO BE THE NB OF CLUSTERS
     //std::cout << "Event " << event << " has " << eventHeader->getMCEventStats().getNKeptTracks() << " tracks and " << nMFTHits << " hits\n";
-
+    printf("Number of clusters detected = %d\n", nClusters);
     int trkID=0, evnID=0, srcID=0;
     bool fake= false;
-    //std::vector<std::vector<int>> mcLabelHasClustersInMFTDisks(nClusters,{0,0,0,0,0});//taille ?
-
+    std::vector<std::array<bool,5>> mcLabelHasClustersInMFTDisks(nClusters,{0,0,0,0,0});//taille ?
+    std::vector<int> trkIDTable;
+    std::vector<int>::iterator it; //iterator to find the index where trkID is in the trkIDTable
+    int index=-1;
 
 
       for (int icls = 0; icls < nClusters; ++icls)
@@ -73,13 +75,24 @@ void FindTrackableTracks()
         auto cluster = clsVec[clsEntry];
         auto& clsLabel = (clsLabels->getLabels(clsEntry))[0];//1er label seulement ?? faire une boucle sur les labels ?
         clsLabel.get(trkID, evnID, srcID, fake);
-        printf("###########################################label = %llu, trackID = %d\n", clsLabel.getRawValue(), trkID);
+        printf("icls =%d , label = %llu, trackID = %d\n", icls, clsLabel.getRawValue(), trkID);
         auto clsLayer =  mftChipMapper.chip2Layer(cluster.getChipID());
         int clsMFTdiskID = clsLayer/2; //entier pour root
-        //mcLabelHasClustersInMFTDisks[clsLabel][clsMFTdiskID]=true;
+        it=std::find(trkIDTable.begin(), trkIDTable.end(), trkID);
+          if (it != trkIDTable.end())//trkID is already in the array trkIDTable
+          {
+            index=std::distance(trkIDTable.begin(), it);//at THIS index
+          }
+          else //trkID is not yet in trkIDTable
+          {
+            index=trkIDTable.size();
+            trkIDTable.push_back(trkID); //we add it to the table
+          }
+        printf("index = %d, trackID = %d, diskID =%d\n", index, trkID, clsMFTdiskID);
+        mcLabelHasClustersInMFTDisks[index][clsMFTdiskID]=true;
 
       }
-
+      printf("Number of trkID stored in the trkIDTable : %lu\n", trkIDTable.size());
       /*for (auto& clabel : clsLabels) // sur tous les MCLabel A REVOIR
       {
         int nMFTDisksHasHits = 0;//has clusters instead of hits now
