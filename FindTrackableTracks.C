@@ -1,26 +1,18 @@
 using MFTCluster = o2::BaseCluster<float>;
 using MFTTrack = o2::mft::TrackMFT;
+using o2::itsmft::CompClusterExt; //useful
 o2::itsmft::ChipMappingMFT mftChipMapper;
 std::vector<MFTTrack> mMFTTracks;
 std::vector<MFTCluster> mMFTClusters;
-std::vector<int> mtrackExtClsIDs;
 
-void FindTrackableTracks()
+TH1D *histNoccurencesPerMCLabel=0;
+
+void BookHistos();
+
+void FindTrackableTracks(const Char_t *kineFileName = "o2sim_Kine.root", const Char_t *clusterFileName = "mftclusters.root")
 {
+  BookHistos();
 
-  using o2::itsmft::CompClusterExt;
-
-  constexpr float DefClusErrorRow = 26.88e-4 * 0.5;
-  constexpr float DefClusErrorCol = 29.24e-4 * 0.5;
-  constexpr float DefClusError2Row = DefClusErrorRow * DefClusErrorRow;
-  constexpr float DefClusError2Col = DefClusErrorCol * DefClusErrorCol;
-
-  // Geometry and matrix transformations
-  std::string inputGeom = "o2sim_geometry.root";
-  o2::base::GeometryManager::loadGeometry(inputGeom);
-  auto gman = o2::mft::GeometryTGeo::Instance();
-  gman->fillMatrixCache(
-    o2::math_utils::bit2Mask(o2::math_utils::TransformType::L2G));
 
   // Cluster pattern dictionary
   std::string dictfile = "MFTdictionary.bin";
@@ -37,8 +29,8 @@ void FindTrackableTracks()
 
 
   int nMFTTrackable;
-  TFile fileC("~/Documents/DOCTORAT/simpp_10Ev_2/mftclusters.root");
-  TTree* clsTree = (TTree*)fileC.Get("o2sim");
+  TFile clusterFile(clusterFileName);
+  TTree* clsTree = (TTree*)clusterFile.Get("o2sim");
   std::vector<CompClusterExt> clsVec, *clsVecP = &clsVec;
   clsTree->SetBranchAddress("MFTClusterComp", &clsVecP);
 
@@ -52,7 +44,15 @@ void FindTrackableTracks()
       printf("No Monte-Carlo information in this file\n");
       return;
     }
-    //clsLabel.get(trkID, evnID, srcID, fake);
+
+    // MC tracks
+    TFile kineFile(kineFileName);//o2sim_Kine.root contains the kinematic of generated MCTracks
+    TTree *kineTree = (TTree*)kineFile.Get("o2sim");
+    std::vector<o2::MCTrack> mcTrkVec, *mcTrkVecP = &mcTrkVec;
+    kineTree->SetBranchAddress("MCTrack",&mcTrkVecP);
+    o2::dataformats::MCEventHeader* eventHeader = nullptr;
+    kineTree->SetBranchAddress("MCEventHeader.", &eventHeader);
+
 
   int nEntries = clsTree->GetEntries();
   printf("Number of entries in clusters tree %d \n", nEntries);
@@ -61,11 +61,15 @@ void FindTrackableTracks()
   int nClusters = (int)clsVec.size(); // Number of mft hits in this event --NEEDS TO BE THE NB OF CLUSTERS
     //std::cout << "Event " << event << " has " << eventHeader->getMCEventStats().getNKeptTracks() << " tracks and " << nMFTHits << " hits\n";
     printf("Number of clusters detected = %d\n", nClusters);
+
+    int nMFTDisksHasClusters = 0;
     int trkID=0, evnID=0, srcID=0;
     bool fake= false;
+    long long int mcLabel = 0;
     std::vector<std::array<bool,5>> mcLabelHasClustersInMFTDisks(nClusters,{0,0,0,0,0});//taille ?
-    std::vector<int> trkIDTable;
-    std::vector<int>::iterator it; //iterator to find the index where trkID is in the trkIDTable
+    std::vector<long long int> mcLabelTable; //contains mcLabel and the number of occurences of this mcLabel
+    std::vector<int> nbLabelOcurrences;
+    std::vector<long long int>::iterator it; //iterator to find the index where trkID is in the mcLabelTable
     int index=-1;
 
 
@@ -75,37 +79,58 @@ void FindTrackableTracks()
         auto cluster = clsVec[clsEntry];
         auto& clsLabel = (clsLabels->getLabels(clsEntry))[0];//1er label seulement ?? faire une boucle sur les labels ?
         clsLabel.get(trkID, evnID, srcID, fake);
-        printf("icls =%d , label = %llu, trackID = %d\n", icls, clsLabel.getRawValue(), trkID);
+        //printf("icls =%d , label = %llu, trackID = %d\n", icls, clsLabel.getRawValue(), trkID);
         auto clsLayer =  mftChipMapper.chip2Layer(cluster.getChipID());
         int clsMFTdiskID = clsLayer/2; //entier pour root
-        it=std::find(trkIDTable.begin(), trkIDTable.end(), trkID);
-          if (it != trkIDTable.end())//trkID is already in the array trkIDTable
+        it=std::find(mcLabelTable.begin(), mcLabelTable.end(), clsLabel.getRawValue());
+          if (it != mcLabelTable.end())//trkID is already in the array mcLabelTable
           {
-            index=std::distance(trkIDTable.begin(), it);//at THIS index
+            index=std::distance(mcLabelTable.begin(), it);//at THIS index
+            nbLabelOcurrences[index]+=1;
+            printf("#####icls =%d, mcLabel=%llu , nOcurrences =%d\n", icls, clsLabel.getRawValue(), nbLabelOcurrences[index]);
           }
-          else //trkID is not yet in trkIDTable
+          else //trkID is not yet in mcLabelTable
           {
-            index=trkIDTable.size();
-            trkIDTable.push_back(trkID); //we add it to the table
+            index=mcLabelTable.size();
+            mcLabelTable.push_back(clsLabel.getRawValue()); //we add it to the table
+            nbLabelOcurrences.push_back(1);
           }
-        printf("index = %d, trackID = %d, diskID =%d\n", index, trkID, clsMFTdiskID);
+        printf("index = %d,diskID =%d\n", index, clsMFTdiskID);
+
         mcLabelHasClustersInMFTDisks[index][clsMFTdiskID]=true;
 
       }
-      printf("Number of trkID stored in the trkIDTable : %lu\n", trkIDTable.size());
-      /*for (auto& clabel : clsLabels) // sur tous les MCLabel A REVOIR
+      printf("Number of mcLabels stored in the mcLabelTable : %lu\n", mcLabelTable.size());
+
+      for (auto ilabel = 0 ; ilabel < mcLabelTable.size() ; ilabel++)//ilabel is the index corresponding to each mcLabel
       {
-        int nMFTDisksHasHits = 0;//has clusters instead of hits now
-          for(auto disk: {0,1,2,3,4}) nMFTDisksHasHits+= int(mcLabelHasClustersInMFTDisks[clabel][disk]);
-          if(nMFTDisksHasHits>=4)
-          {   //Track is trackable if has left hits on at least 4 disks
-            nMFTTrackable++;
-            std::cout << "So far we have " << nMFTTrackable << " mftlabels identifying trackable MFT tracks " << std::endl;
-            MFTTrackablesEtaZ->Fill(z,eta);
-            TrackablepT->Fill(pt);
-            Trackablep->Fill(p);
-            TrackableEta->Fill(eta);
-          }
-      }*/
-      auto& mftTrack : mMFTTracks
+
+        nMFTDisksHasClusters = 0;//has to be put in a separate IsTrackTrackable() method ?
+        //mcLabel=mcLabelTable[ilabel];
+        for(auto disk: {0,1,2,3,4}) nMFTDisksHasClusters+= int(mcLabelHasClustersInMFTDisks[mcLabel][disk]);
+        /*if(nMFTDisksHasClusters>=4)// if IsTrackTrackable(mcLabel)
+        {   //Track is trackable if has left at least 1 cluster on at least 4 different disks
+          nMFTTrackable++;
+          std::cout << "So far we have " << nMFTTrackable << " mftlabels identifying trackable MFT tracks " << std::endl;
+          MFTTrackablesEtaZ->Fill(z,eta);
+          TrackablepT->Fill(pt);
+          Trackablep->Fill(p);
+          TrackableEta->Fill(eta);
+        }*/
+
+
+        histNoccurencesPerMCLabel->Fill(nbLabelOcurrences[ilabel]);
+      }
+
+
+      histNoccurencesPerMCLabel->SetXTitle("Number of occurences");
+      histNoccurencesPerMCLabel->SetYTitle("Number of labels having this occurence");
+
+      histNoccurencesPerMCLabel->Draw();
+}
+
+void BookHistos()
+{
+  histNoccurencesPerMCLabel = new TH1D("histNOccurencesPerMCLabel", "",100 , 0., 100.);
+  //histNoccurencesPerMCLabel->Sumw2();
 }

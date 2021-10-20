@@ -237,6 +237,7 @@ void MFTTrackerChecker(Double_t pMax = 6.0,
 	allFoundTracksLTF[eventID][thisTrkID] = true;
 	nCleanTracksLTF++;
       } else {
+        
 	allFoundTracksCA[eventID][thisTrkID] = true;
 	nCleanTracksCA++;
       }
@@ -280,7 +281,7 @@ void MFTTrackerChecker(Double_t pMax = 6.0,
 	continue;
       }
 
-      auto z = thisTrack->GetStartVertexCoordinatesZ();
+      auto z = thisTrack->GetStartVertexCoordinatesZ();//z de production de la trace
       auto pt = thisTrack->GetPt();
       auto p = thisTrack->GetP();
       auto eta = atanh (thisTrack->GetStartVertexMomentumZ()/p); // eta;
