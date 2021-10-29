@@ -270,32 +270,32 @@ void BookHistos()
   for (int i = 0; i < kNumberOfTracks ; i++)
   {
     //histPhiVsEta
-    histPhiVsEta[i] = new TH2D((string("histPhiVsEta")+nameOfTracks[i]).c_str(), (string("Phi Vs Eta of ")+nameOfTracks[i]).c_str(), 50, 1.0, 4.5, 100, 0., 2*TMath::Pi());
+    histPhiVsEta[i] = new TH2D((string("histPhiVsEta")+nameOfTracks[i]).c_str(), (string("Phi Vs Eta of ")+nameOfTracks[i]).c_str(), 20, 1.0, 4.5, 40, 0., 2*TMath::Pi());
     histPhiVsEta[i]->SetXTitle((string("#eta of ")+nameOfTracks[i]).c_str());
     histPhiVsEta[i]->SetYTitle((string("#phi of ")+nameOfTracks[i]).c_str());
 
 
     //histPtVsEta
-    histPtVsEta[i] = new TH2D((string("histPtVsEta")+nameOfTracks[i]).c_str(), (string("Pt Vs Eta of ")+nameOfTracks[i]).c_str(), 50, 1.0, 4.5, 100, 0., 10.);
+    histPtVsEta[i] = new TH2D((string("histPtVsEta")+nameOfTracks[i]).c_str(), (string("Pt Vs Eta of ")+nameOfTracks[i]).c_str(), 20, 1.0, 4.5, 40, 0., 10.);
     histPtVsEta[i]->SetXTitle((string("#eta of ")+nameOfTracks[i]).c_str());
-    histPtVsEta[i]->SetYTitle((string("p_{T} of ")+nameOfTracks[i]).c_str());
+    histPtVsEta[i]->SetYTitle((string("p_{T} (GeV/c) of ")+nameOfTracks[i]).c_str());
 
     //histPhiVsPt
-    histPhiVsPt[i] = new TH2D((string("histPhiVsPt")+nameOfTracks[i]).c_str(), (string("Phi Vs Pt of ")+nameOfTracks[i]).c_str(), 100, 0., 10., 100, 0., 2*TMath::Pi());
-    histPhiVsPt[i]->SetXTitle((string("p_{T} of ")+nameOfTracks[i]).c_str());
+    histPhiVsPt[i] = new TH2D((string("histPhiVsPt")+nameOfTracks[i]).c_str(), (string("Phi Vs Pt of ")+nameOfTracks[i]).c_str(), 40, 0., 10., 40, 0., 2*TMath::Pi());
+    histPhiVsPt[i]->SetXTitle((string("p_{T} (GeV/c) of ")+nameOfTracks[i]).c_str());
     histPhiVsPt[i]->SetYTitle((string("#phi of ")+nameOfTracks[i]).c_str());
 
     if (i < kNumberOfTracks-1)//information only available for generated and trackable tracks
     {
       //histZvtxVsEta
-      histZvtxVsEta[i] = new TH2D((string("histZvtxVsEta")+nameOfTracks[i]).c_str(), (string("Z_{vtx} Vs Eta of ")+nameOfTracks[i]).c_str(), 50, 1.0, 4.5, 15, -15, 15);
+      histZvtxVsEta[i] = new TH2D((string("histZvtxVsEta")+nameOfTracks[i]).c_str(), (string("Z_{vtx} Vs Eta of ")+nameOfTracks[i]).c_str(), 20, 1.0, 4.5, 15, -15, 15);
       histZvtxVsEta[i]->SetXTitle((string("#eta of ")+nameOfTracks[i]).c_str());
-      histZvtxVsEta[i]->SetYTitle((string("z_{vtx} of ")+nameOfTracks[i]).c_str());
+      histZvtxVsEta[i]->SetYTitle((string("z_{vtx} (cm) of ")+nameOfTracks[i]).c_str());
 
       //histRVsZ
-      histRVsZ[i] = new TH2D((string("histRVsZ")+nameOfTracks[i]).c_str(), (string("R Vs Z of ")+nameOfTracks[i]).c_str(), 400, -80., 20., 130, 0., 30.);
-      histRVsZ[i]->SetXTitle((string("z origin of ")+nameOfTracks[i]).c_str());
-      histRVsZ[i]->SetYTitle((string("R radius of origin of ")+nameOfTracks[i]).c_str());
+      histRVsZ[i] = new TH2D((string("histRVsZ")+nameOfTracks[i]).c_str(), (string("R Vs Z of ")+nameOfTracks[i]).c_str(), 400, -80., 20., 400, 0., 80.);
+      histRVsZ[i]->SetXTitle((string("z (cm) origin of ")+nameOfTracks[i]).c_str());
+      histRVsZ[i]->SetYTitle((string("R (cm) radius of origin of ")+nameOfTracks[i]).c_str());
 
     }
   }
