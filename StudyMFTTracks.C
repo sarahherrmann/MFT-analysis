@@ -21,13 +21,13 @@ std::vector<TH2D*> histRVsZ(kTypeOfTracks-1);//-1 because only for gen and track
 //-----------------------------------------------------------------------------------------------
 
 void BookHistos();
-void loadMFTTracks();
+void loadMFTTracks(const Char_t *recoFileName = "mfttracks.root");
 
-
-void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const Char_t *kineFileName = "o2sim_Kine.root", const Char_t *clusterFileName = "mftclusters.root")
+//"./mcarchive/tf10/sgn_10_Kine.root"
+void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const Char_t *kineFileName = "o2sim_Kine.root", const Char_t *clusterFileName = "mftclusters.root", const Char_t *recoFileName = "mfttracks.root")
 {
   BookHistos();
-  loadMFTTracks();
+  loadMFTTracks(recoFileName);
   TFile of(ofname, "RECREATE");//output file
 
   // MC tracks file: initializing generated kinematics tree
@@ -116,7 +116,8 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
 
   o2::MCCompLabel mcLabel;
 
-  std::vector<std::array<bool,5>> mcLabelHasClustersInMFTDisks(nClusters,{0,0,0,0,0});//taille ?
+  std::vector<std::array<bool,5>> mcLabelHasClustersInMFTDisks;
+  std::array<bool,5> boolClusterInMFTDisks={0,0,0,0,0};
   std::vector<long long int> mcLabelTableRaw; //contains the raw values of the mcLabel which have at least one cluster
   std::vector<o2::MCCompLabel> mcLabelTable; //contains the mcLabel which have at least one cluster
   std::vector<int> nClusterPerLabel;
@@ -127,30 +128,38 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
         for (int icls = 0; icls < nClusters; ++icls)
         {
           auto cluster = clsVec[icls];
-          auto& clsLabel = (clsLabels->getLabels(icls))[0];//WE SHOULD LOOP OVER LABELS
-          clsLabel.get(trackID, evnID, srcID, fake);
-          //printf("icls =%d , label = %llu, trackID = %d\n", icls, clsLabel.getRawValue(), trackID);
-          auto clsLayer =  mftChipMapper.chip2Layer(cluster.getChipID());
-          int clsMFTdiskID = clsLayer/2; //entier pour root
-          it=std::find(mcLabelTableRaw.begin(), mcLabelTableRaw.end(), clsLabel.getRawValue());
+          auto labelSize=(clsLabels->getLabels(icls)).size();
+          for (auto il = 0 ; il < labelSize ; il++)
+          {
+            auto& clsLabel = (clsLabels->getLabels(icls))[il];
+            clsLabel.get(trackID, evnID, srcID, fake);
+
+
+            auto clsLayer =  mftChipMapper.chip2Layer(cluster.getChipID());
+            int clsMFTdiskID = clsLayer/2; //entier pour root
+            it=std::find(mcLabelTableRaw.begin(), mcLabelTableRaw.end(), clsLabel.getRawValue());
             if (it != mcLabelTableRaw.end())//mcLabel is already in the array mcLabelTableRaw
-            {
-              index=std::distance(mcLabelTableRaw.begin(), it);//at THIS index
-              nClusterPerLabel[index]+=1;
-              //printf("#####icls =%d, mcLabel=%llu , nOcurrences =%d\n", icls, clsLabel.getRawValue(), nClusterPerLabel[index]);
-            }
+              {
+                index=std::distance(mcLabelTableRaw.begin(), it);//at THIS index
+                nClusterPerLabel[index]+=1;
+                //printf("#####icls =%d, mcLabel=%llu , nOcurrences =%d\n", icls, clsLabel.getRawValue(), nClusterPerLabel[index]);
+              }
             else //mcLabel is not yet in mcLabelTableRaw
-            {
-              index=mcLabelTableRaw.size();
-              mcLabelTableRaw.push_back(clsLabel.getRawValue()); //we add it to the tables
-              mcLabelTable.push_back(clsLabel);
-              nClusterPerLabel.push_back(1);
-              //mcLabelHasClustersInMFTDisks.push_back({0,0,0,0,0}) voir si ça fonctionne
-            }
-          //printf("index = %d,diskID =%d\n", index, clsMFTdiskID);
+              {
+                index=mcLabelTableRaw.size();
+                mcLabelTableRaw.push_back(clsLabel.getRawValue()); //we add it to the tables
+                mcLabelTable.push_back(clsLabel);
+                nClusterPerLabel.push_back(1);
+                mcLabelHasClustersInMFTDisks.push_back(boolClusterInMFTDisks);
 
-          mcLabelHasClustersInMFTDisks[index][clsMFTdiskID]=true;
+              }
+            //printf("index = %d,diskID =%d\n", index, clsMFTdiskID);
 
+            mcLabelHasClustersInMFTDisks[index][clsMFTdiskID]=true;
+          //end of the loop on mcLabels for the cluster icls
+          }
+
+        //end of the loop on clusters
         }
         //printf("Number of mcLabels stored in the mcLabelTableRaw : %lu\n", mcLabelTableRaw.size());
 
@@ -199,19 +208,22 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
         for (auto& mftTrack : mMFTTracks)
         {//loop over the MFT tracks
           auto ncls = mftTrack.getNumberOfPoints();
+          eta[kReco] = -1*mftTrack.getEta();
+          pt[kReco] = mftTrack.getPt();
 
-          histPtVsEta[kReco]->Fill(-1*mftTrack.getEta(),mftTrack.getPt());
-          if (mftTrack.getPhi()<0)
+
+          if (mftTrack.getPhi()>=TMath::Pi()/2)
           {
-            phi[kReco]=mftTrack.getPhi()+2*TMath::Pi();
+            phi[kReco]=-mftTrack.getPhi()+TMath::Pi()/2+2*TMath::Pi();
           }
           else
           {
-            phi[kReco]=mftTrack.getPhi();
+            phi[kReco]=-mftTrack.getPhi()+TMath::Pi()/2;
           }
 
-          histPhiVsEta[kReco]->Fill(-1*mftTrack.getEta(),phi[kReco]);
-          histPhiVsPt[kReco]->Fill(mftTrack.getPt(),phi[kReco]);
+          histPtVsEta[kReco]->Fill(eta[kReco],pt[kReco]);
+          histPhiVsEta[kReco]->Fill(eta[kReco],phi[kReco]);
+          histPhiVsPt[kReco]->Fill(pt[kReco],phi[kReco]);
         }
         //----------------------END OF RECO TRACKS
 
@@ -237,12 +249,11 @@ of.Close();
 //end of StudyMFTTracks
 }
 
-void loadMFTTracks()
+void loadMFTTracks(const Char_t *recoFileName = "mfttracks.root")
 {
   // Load all mft tracks
 
-  std::string trkFile = "mfttracks.root";
-  TFile* trkFileIn = new TFile(trkFile.c_str());
+  TFile* trkFileIn = new TFile(recoFileName);
   TTree* mftTrackTree = (TTree*)trkFileIn->Get("o2sim");
   std::vector<o2::mft::TrackMFT> trackMFTVec, *trackMFTVecP = &trackMFTVec;
   mftTrackTree->SetBranchAddress("MFTTrack", &trackMFTVecP);
@@ -277,14 +288,14 @@ void BookHistos()
     histPhiVsPt[i]->SetYTitle((string("#phi of ")+nameOfTracks[i]).c_str());
     histPhiVsPt[i]->Sumw2();
 
+    //histZvtxVsEta
+    histZvtxVsEta[i] = new TH2D((string("histZvtxVsEta")+nameOfTracks[i]).c_str(), (string("Z_{vtx} Vs Eta of ")+nameOfTracks[i]).c_str(), 35, 1.0, 4.5, 15, -15, 15);
+    histZvtxVsEta[i]->SetXTitle((string("#eta of ")+nameOfTracks[i]).c_str());
+    histZvtxVsEta[i]->SetYTitle((string("z_{vtx} (cm) of ")+nameOfTracks[i]).c_str());
+    histZvtxVsEta[i]->Sumw2();
+
     if (i < kTypeOfTracks-1)//information only available for generated and trackable tracks
     {
-      //histZvtxVsEta
-      histZvtxVsEta[i] = new TH2D((string("histZvtxVsEta")+nameOfTracks[i]).c_str(), (string("Z_{vtx} Vs Eta of ")+nameOfTracks[i]).c_str(), 35, 1.0, 4.5, 15, -15, 15);
-      histZvtxVsEta[i]->SetXTitle((string("#eta of ")+nameOfTracks[i]).c_str());
-      histZvtxVsEta[i]->SetYTitle((string("z_{vtx} (cm) of ")+nameOfTracks[i]).c_str());
-      histZvtxVsEta[i]->Sumw2();
-
       //histRVsZ
       histRVsZ[i] = new TH2D((string("histRVsZ")+nameOfTracks[i]).c_str(), (string("R Vs Z of ")+nameOfTracks[i]).c_str(), 400, -80., 20., 400, 0., 80.);
       histRVsZ[i]->SetXTitle((string("z (cm) origin of ")+nameOfTracks[i]).c_str());
