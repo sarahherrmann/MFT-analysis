@@ -1,7 +1,7 @@
 using MFTCluster = o2::BaseCluster<float>;
 using MFTTrack = o2::mft::TrackMFT;
 using o2::MCTrack;
-using o2::itsmft::CompClusterExt; //useful
+using o2::itsmft::CompClusterExt;
 o2::itsmft::ChipMappingMFT mftChipMapper;
 std::vector<MFTTrack> mMFTTracks;
 std::vector<MFTCluster> mMFTClusters;
@@ -18,25 +18,35 @@ std::vector<TH2D*> histPhiVsPt(kTypeOfTracks);
 std::vector<TH2D*> histZvtxVsEta(kTypeOfTracks);
 std::vector<TH2D*> histRVsZ(kTypeOfTracks-1);//-1 because only for gen and trackable tracks
 
+bool withMC = false;
+
+std::vector<std::array<bool,5>> mcLabelHasClustersInMFTDisks;
+int nCrossedDisksPerLabel = 0;
+
 //-----------------------------------------------------------------------------------------------
 
 void BookHistos();
 void loadMFTTracks(const Char_t *recoFileName = "mfttracks.root");
+bool IsTrackTrackable(std::array<bool,5> hasClusterInMFTDisks);
 
 //"./mcarchive/tf10/sgn_10_Kine.root"
 void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const Char_t *kineFileName = "o2sim_Kine.root", const Char_t *clusterFileName = "mftclusters.root", const Char_t *recoFileName = "mfttracks.root")
 {
   BookHistos();
   loadMFTTracks(recoFileName);
-  TFile of(ofname, "RECREATE");//output file
+
 
   // MC tracks file: initializing generated kinematics tree
   TFile kineFile(kineFileName);//kineFileName contains the kinematic of generated MCTracks
+  //if (kineFile.IsOpen())
   TTree *kineTree = (TTree*)kineFile.Get("o2sim");
   std::vector<o2::MCTrack> mcTrkVec, *mcTrkVecP = &mcTrkVec;
   kineTree->SetBranchAddress("MCTrack",&mcTrkVecP);
   o2::dataformats::MCEventHeader* eventHeader = nullptr;
   kineTree->SetBranchAddress("MCEventHeader.", &eventHeader);
+
+  withMC=true;
+
 
 
 
@@ -63,11 +73,16 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
       z[kGen]    = thisTrackGen->GetStartVertexCoordinatesZ();
       R[kGen]    = sqrt(pow(thisTrackGen->GetStartVertexCoordinatesX(),2)+pow(thisTrackGen->GetStartVertexCoordinatesY(),2));
 
-      histPtVsEta[kGen]  ->Fill(eta[kGen],pt[kGen]);
-      histPhiVsEta[kGen] ->Fill(eta[kGen],phi[kGen]);
-      histPhiVsPt[kGen]  ->Fill(pt[kGen],phi[kGen]);
-      histZvtxVsEta[kGen]->Fill(eta[kGen],zVtx[kGen]);
-      histRVsZ[kGen]     ->Fill(z[kGen],R[kGen]);
+      if ((R[kGen]<0.2) && (TMath::Abs(z[kGen])<20))//coupure sur l'origine de la trace
+      {
+        histPtVsEta[kGen]  ->Fill(eta[kGen],pt[kGen]);
+        histPhiVsEta[kGen] ->Fill(eta[kGen],phi[kGen]);
+        histPhiVsPt[kGen]  ->Fill(pt[kGen],phi[kGen]);
+        histZvtxVsEta[kGen]->Fill(eta[kGen],zVtx[kGen]);
+        histRVsZ[kGen]     ->Fill(z[kGen],R[kGen]);
+      }
+
+
       //end of loop on trkIDs
     }
     //end of loop on events
@@ -116,7 +131,7 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
 
   o2::MCCompLabel mcLabel;
 
-  std::vector<std::array<bool,5>> mcLabelHasClustersInMFTDisks;
+
   std::array<bool,5> boolClusterInMFTDisks={0,0,0,0,0};
   std::vector<long long int> mcLabelTableRaw; //contains the raw values of the mcLabel which have at least one cluster
   std::vector<o2::MCCompLabel> mcLabelTable; //contains the mcLabel which have at least one cluster
@@ -186,8 +201,7 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
 
 
 
-            for(auto disk: {0,1,2,3,4}) nCrossedDisksPerLabel+= int(mcLabelHasClustersInMFTDisks[ilabel][disk]);
-            if(nCrossedDisksPerLabel>=4)// if IsTrackTrackable(mcLabel)
+            if (IsTrackTrackable(mcLabelHasClustersInMFTDisks[ilabel]))
             {   //Track is trackable if has left at least 1 cluster on at least 4 different disks
 
               histPtVsEta[kTrackable]  ->Fill(eta[kTrackable],pt[kTrackable]);
@@ -227,6 +241,7 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
         }
         //----------------------END OF RECO TRACKS
 
+TFile of(ofname, "RECREATE");//output file
 //Write everything in one output file
 of.cd();
 for (int i = 0; i < kTypeOfTracks ; i++)
@@ -266,12 +281,28 @@ void loadMFTTracks(const Char_t *recoFileName = "mfttracks.root")
   mtrackExtClsIDs.swap(trackExtClsVec);
 }
 
+bool IsTrackTrackable(std::array<bool,5> hasClusterInMFTDisks)
+{
+  nCrossedDisksPerLabel = 0;
+  for(auto disk: {0,1,2,3,4}) nCrossedDisksPerLabel+= int(hasClusterInMFTDisks[disk]);
+  if(nCrossedDisksPerLabel>=4)
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+
+
 void BookHistos()
 {
   for (int i = 0; i < kTypeOfTracks ; i++)
   {
     //histPhiVsEta
-    histPhiVsEta[i] = new TH2D((string("histPhiVsEta")+nameOfTracks[i]).c_str(), (string("Phi Vs Eta of ")+nameOfTracks[i]).c_str(), 35, 1.0, 4.5, 12, 0., 2*TMath::Pi());
+    histPhiVsEta[i] = new TH2D((string("histPhiVsEta")+nameOfTracks[i]).c_str(), (string("Phi Vs Eta of ")+nameOfTracks[i]).c_str(), 35, 1.0, 4.5, 24, 0., 2*TMath::Pi());
     histPhiVsEta[i]->SetXTitle((string("#eta of ")+nameOfTracks[i]).c_str());
     histPhiVsEta[i]->SetYTitle((string("#phi of ")+nameOfTracks[i]).c_str());
     histPhiVsEta[i]->Sumw2();
@@ -283,7 +314,7 @@ void BookHistos()
     histPtVsEta[i]->Sumw2();
 
     //histPhiVsPt
-    histPhiVsPt[i] = new TH2D((string("histPhiVsPt")+nameOfTracks[i]).c_str(), (string("Phi Vs Pt of ")+nameOfTracks[i]).c_str(), 40, 0., 10., 12, 0., 2*TMath::Pi());
+    histPhiVsPt[i] = new TH2D((string("histPhiVsPt")+nameOfTracks[i]).c_str(), (string("Phi Vs Pt of ")+nameOfTracks[i]).c_str(), 40, 0., 10., 24, 0., 2*TMath::Pi());
     histPhiVsPt[i]->SetXTitle((string("p_{T} (GeV/c) of ")+nameOfTracks[i]).c_str());
     histPhiVsPt[i]->SetYTitle((string("#phi of ")+nameOfTracks[i]).c_str());
     histPhiVsPt[i]->Sumw2();
