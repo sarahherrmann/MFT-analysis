@@ -7,18 +7,19 @@ std::vector<MFTTrack> mMFTTracks;
 std::vector<MFTCluster> mMFTClusters;
 std::vector<int> mtrackExtClsIDs;
 
-enum typeOfTracks {kGen, kTrackable, kReco, kTypeOfTracks};
+enum typeOfTracks {kGen, kTrackable, kReco, kRecoTrue, kTypeOfTracks};
 
-std::vector<string> nameOfTracks = {"Gen","Trackable","Rec"};//of size kTypeOfTracks
+std::vector<string> nameOfTracks = {"Gen","Trackable","Rec","Rec and True"};//of size kTypeOfTracks
 
+TH2D *histPhiRecVsPhiGen=0, *histEtaRecVsEtaGen=0;
 
 std::vector<TH2D*> histPhiVsEta(kTypeOfTracks);
 std::vector<TH2D*> histPtVsEta(kTypeOfTracks); //even though pt not much sense for efficiency
 std::vector<TH2D*> histPhiVsPt(kTypeOfTracks);
 std::vector<TH2D*> histZvtxVsEta(kTypeOfTracks);
-std::vector<TH2D*> histRVsZ(kTypeOfTracks-1);//-1 because only for gen and trackable tracks
+std::vector<TH2D*> histRVsZ(kTypeOfTracks-2);//-2 because only for gen and trackable tracks
 
-bool withMC = false;
+
 
 std::vector<std::array<bool,5>> mcLabelHasClustersInMFTDisks;
 int nCrossedDisksPerLabel = 0;
@@ -28,8 +29,10 @@ int nCrossedDisksPerLabel = 0;
 void BookHistos();
 void loadMFTTracks(const Char_t *recoFileName = "mfttracks.root");
 bool IsTrackTrackable(std::array<bool,5> hasClusterInMFTDisks);
+std::pair<long long int, int> findEntryWithLargestValue(std::map<long long int, int> sampleMap);
 
-//"./mcarchive/tf10/sgn_10_Kine.root"
+
+
 void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const Char_t *kineFileName = "o2sim_Kine.root", const Char_t *clusterFileName = "mftclusters.root", const Char_t *recoFileName = "mfttracks.root")
 {
   BookHistos();
@@ -44,8 +47,6 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
   kineTree->SetBranchAddress("MCTrack",&mcTrkVecP);
   o2::dataformats::MCEventHeader* eventHeader = nullptr;
   kineTree->SetBranchAddress("MCEventHeader.", &eventHeader);
-
-  withMC=true;
 
 
 
@@ -219,12 +220,106 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
 
 
         //----------------------------RECONSTRUCTED TRACKS
+        int srcIDTrue, trkIDTrue, evnIDTrue;
+        fake = false;
+        Int_t iTrack = 0;
         for (auto& mftTrack : mMFTTracks)
         {//loop over the MFT tracks
-          auto ncls = mftTrack.getNumberOfPoints();
-          eta[kReco] = -1*mftTrack.getEta();
-          pt[kReco] = mftTrack.getPt();
 
+          auto ncls = mftTrack.getNumberOfPoints();
+          auto offset = mftTrack.getExternalClusterIndexOffset();
+          std::map<long long int, int> mcLabels;
+          for (int icls = 0; icls < ncls; ++icls)//cluster loop 1
+          {
+            auto clsEntry = mtrackExtClsIDs[offset + icls];
+            auto cluster = clsVec[clsEntry];
+
+            for (int ilabel = 0; ilabel < (clsLabels->getLabels(clsEntry)).size(); ++ilabel)
+            {
+              auto& clsLabel = (clsLabels->getLabels(clsEntry))[ilabel];
+              clsLabel.get(trkIDTrue, evnIDTrue, srcIDTrue, fake);
+              if (!clsLabel.isNoise())
+              {
+        	       mcLabels[clsLabel.getRawValue()] += 1;
+              }
+            }
+
+
+          }//end of cluster loop 1
+
+          std::pair<long long int, int> entryWithMaxValue = findEntryWithLargestValue(mcLabels);
+
+
+
+          Int_t thisEvnID = -1, thisSrcID = -1, thisTrkID = -1, thisEventIDLabel = -1, nPoints = mftTrack.getNumberOfPoints();
+          bool thisFake=false;
+
+          //cout << "Entry with highest value: "<< entryWithMaxValue.first << " = "<< entryWithMaxValue.second << endl;
+          //printf("Number of points for this track = %d\n", nPoints);
+          for (int icls = 0; icls < ncls; ++icls)
+          {
+            auto clsEntry = mtrackExtClsIDs[offset + icls];
+            auto cluster = clsVec[clsEntry];
+            for (int ilabel = 0; ilabel < (clsLabels->getLabels(clsEntry)).size(); ++ilabel)
+            {
+              auto& clsLabel = (clsLabels->getLabels(clsEntry))[ilabel];
+              clsLabel.get(trkIDTrue, evnIDTrue, srcIDTrue, fake);
+
+
+
+              if ((!clsLabel.isNoise()) && (clsLabel.getRawValue()==entryWithMaxValue.first))
+              {
+        	       if (((Float_t)(mcLabels[clsLabel.getRawValue()]) / (Float_t)(nPoints)) >= 0.8)
+                 { // Must have at least 80% of its clusters from the same MC Track
+        	          thisTrkID = trkIDTrue;
+        	          thisSrcID = srcIDTrue;
+        	          thisEvnID = evnIDTrue;
+        	          thisEventIDLabel = icls;
+                    thisFake = fake;
+
+        	       }
+              }
+            }
+
+          }//end of cluster loop 2
+
+          //after that, if thisTrkID, thisSrcID, thisEvnID are still equal to -1, it means the track isn't considered a true track !
+
+          if (thisTrkID==-1)
+          {
+            //printf("NO This track number %d in the reco track tree is not a true track\n", iTrack);
+          }
+          else
+          {
+            //printf("YES this track number %d in the reco track tree of trkIDTrue= %d is true\n", iTrack, thisTrkID);
+            kineTree->GetEntry(thisEvnID);
+
+            MCTrack* thisTrack =  &(mcTrkVec)[thisTrkID];
+            //zVtx[kGen] = eventHeader->GetZ();
+
+            //pt[kGen] = thisTrack->GetPt();
+            eta[kGen] = -1*thisTrack->GetEta();
+            phi[kGen] = thisTrack->GetPhi();
+
+            eta[kRecoTrue]=-1*mftTrack.getEta();
+
+            if (mftTrack.getPhi()>=TMath::Pi()/2)
+            {
+              phi[kRecoTrue]=-mftTrack.getPhi()+TMath::Pi()/2+2*TMath::Pi();
+            }
+            else
+            {
+              phi[kRecoTrue]=-mftTrack.getPhi()+TMath::Pi()/2;
+            }
+
+            //printf("phigen=%f, phirec=%f\n", phi[kGen], phi[kRecoTrue]);
+            histPhiRecVsPhiGen->Fill(phi[kGen], phi[kRecoTrue]);
+            histEtaRecVsEtaGen->Fill(eta[kGen], eta[kRecoTrue]);
+            histPhiVsEta[kRecoTrue]->Fill(eta[kRecoTrue], phi[kRecoTrue]);
+
+          }
+
+          eta[kReco]=-1*mftTrack.getEta();
 
           if (mftTrack.getPhi()>=TMath::Pi()/2)
           {
@@ -235,34 +330,45 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
             phi[kReco]=-mftTrack.getPhi()+TMath::Pi()/2;
           }
 
-          histPtVsEta[kReco]->Fill(eta[kReco],pt[kReco]);
-          histPhiVsEta[kReco]->Fill(eta[kReco],phi[kReco]);
-          histPhiVsPt[kReco]->Fill(pt[kReco],phi[kReco]);
+          histPhiVsEta[kReco]->Fill(eta[kReco], phi[kReco]);
+          iTrack++;
+
+
+          //_______end of purity code
         }
         //----------------------END OF RECO TRACKS
 
-TFile of(ofname, "RECREATE");//output file
-//Write everything in one output file
-of.cd();
-for (int i = 0; i < kTypeOfTracks ; i++)
-  {
-    histPhiVsEta[i]->Write();
-    histPtVsEta[i]->Write();
-    histPhiVsPt[i]->Write();
+  TFile of(ofname, "RECREATE");//output file
+  //Write everything in one output file
+  of.cd();
 
+  histPhiRecVsPhiGen->Write();
+  histEtaRecVsEtaGen->Write();
 
-    if (i < kTypeOfTracks-1)//information only available for generated and trackable tracks
+  for (int i = 0; i < kTypeOfTracks ; i++)
     {
-      histZvtxVsEta[i]->Write();
-      histRVsZ[i]->Write();
+      histPhiVsEta[i]->Write();
+      histPtVsEta[i] ->Write();
+      histPhiVsPt[i] ->Write();
+
+
+      if (i < kTypeOfTracks-2)//information only available for generated and trackable tracks
+      {
+        histZvtxVsEta[i]->Write();
+        histRVsZ[i]     ->Write();
+      }
     }
-  }
-of.Close();
+  of.Close();
 
 
 
 //end of StudyMFTTracks
 }
+
+
+//______________________________________________________________________________
+//______________________________________________________________________________
+
 
 void loadMFTTracks(const Char_t *recoFileName = "mfttracks.root")
 {
@@ -281,6 +387,8 @@ void loadMFTTracks(const Char_t *recoFileName = "mfttracks.root")
   mtrackExtClsIDs.swap(trackExtClsVec);
 }
 
+//______________________________________________________________________________
+
 bool IsTrackTrackable(std::array<bool,5> hasClusterInMFTDisks)
 {
   nCrossedDisksPerLabel = 0;
@@ -293,12 +401,56 @@ bool IsTrackTrackable(std::array<bool,5> hasClusterInMFTDisks)
   {
     return false;
   }
+}//end of IsTrackTrackable
+
+
+
+//______________________________________________________________________________
+
+
+// Function to find the Entry
+// with largest Value in a Map
+std::pair<long long int, int> findEntryWithLargestValue(std::map<long long int, int> sampleMap)
+{
+
+	// Reference variable to help find
+	// the entry with the highest value
+	std::pair<long long int, int> entryWithMaxValue = std::make_pair(0, 0);
+
+	// Iterate in the map to find the required entry
+	std::map<long long int, int>::iterator currentEntry;
+	for (currentEntry = sampleMap.begin(); currentEntry != sampleMap.end(); ++currentEntry)
+  {
+
+		// If this entry's value is more
+		// than the max value
+		// Set this entry as the max
+		if (currentEntry->second > entryWithMaxValue.second)
+    {
+
+			entryWithMaxValue= std::make_pair(currentEntry->first,currentEntry->second);
+		}
+	}
+
+	return entryWithMaxValue;
 }
 
 
+//______________________________________________________________________________
 
 void BookHistos()
 {
+
+  histPhiRecVsPhiGen = new TH2D("histPhiRecVsPhiGen", "Phi Rec Vs Phi Gen of true reco tracks ", 24, 0., 2*TMath::Pi(), 24, 0., 2*TMath::Pi());
+  histPhiRecVsPhiGen->SetXTitle((string("#phi of ")+nameOfTracks[kGen]).c_str());
+  histPhiRecVsPhiGen->SetYTitle((string("#phi of ")+nameOfTracks[kRecoTrue]).c_str());
+  histPhiRecVsPhiGen->Sumw2();
+
+  histEtaRecVsEtaGen = new TH2D("histEtaRecVsEtaGen", "Eta Rec Vs Eta Gen of true reco tracks ", 35, 1.0, 4.5, 35, 1.0, 4.5);
+  histEtaRecVsEtaGen->SetXTitle((string("#eta of ")+nameOfTracks[kGen]).c_str());
+  histEtaRecVsEtaGen->SetYTitle((string("#eta of ")+nameOfTracks[kRecoTrue]).c_str());
+  histEtaRecVsEtaGen->Sumw2();
+
   for (int i = 0; i < kTypeOfTracks ; i++)
   {
     //histPhiVsEta
@@ -325,7 +477,7 @@ void BookHistos()
     histZvtxVsEta[i]->SetYTitle((string("z_{vtx} (cm) of ")+nameOfTracks[i]).c_str());
     histZvtxVsEta[i]->Sumw2();
 
-    if (i < kTypeOfTracks-1)//information only available for generated and trackable tracks
+    if (i < kTypeOfTracks-2)//information only available for generated and trackable tracks
     {
       //histRVsZ
       histRVsZ[i] = new TH2D((string("histRVsZ")+nameOfTracks[i]).c_str(), (string("R Vs Z of ")+nameOfTracks[i]).c_str(), 400, -80., 20., 400, 0., 80.);
