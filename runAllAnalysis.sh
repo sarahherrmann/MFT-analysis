@@ -17,7 +17,7 @@ rm mcarchive.tar.gz
 mkdir ${outputDirName}
 
 outputDir=${PWD}/${outputDirName}
-#cd mcarchive
+
 
 echo "I am working in the directory " $PWD
 
@@ -44,6 +44,7 @@ do
       root -l -b -q 'StudyMFTTracks.C('\"${filenameout}\"','\"sgn_${i}_Kine.root\"')' &
       filenb=$((filenb+1))
     else
+      echo "The directory tf$i does not contain mfttracks.root or mftclusters.root"
       continue
     fi
     cd ..
@@ -52,6 +53,11 @@ do
 done
 
 sleep 6m
+
+if [ $filenb -eq 0 ]; then
+  echo "No files mfttracks.root or mftclusters.root, exiting"
+  exit 1
+fi
 
 cd ${outputDir}
 n=$(ls |wc -l)
@@ -63,7 +69,7 @@ until [ $n == $filenb ]
     n=$(ls |wc -l)
     sleep 2s
     if [ $SECONDS -gt $end ]; then
-      echo "Le script est bloqué depuis 10m, je m'arrête"
+      echo "The script has been stuck for 10m, let's break it"
       break
     fi
   done
@@ -72,4 +78,6 @@ filenamemerged=outputfile_studyTracks_merged.root
 filestomerge=outputfile_studyTracks_???.root
 hadd -f $filenamemerged ${filestomerge}
 
-#line 46: cd: 03-11-2021-18:00/histoResults_03-11-2021-18:00: No such file or directory
+cp $baseDir/EvalEffAndPurity.C .
+
+root -l -b -q 'EvalEffAndPurity.C('\"${filenamemerged}\"','\"${newdirname}_EvalEffAndPurity\"')'
