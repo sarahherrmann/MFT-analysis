@@ -24,12 +24,14 @@ std::vector<TH2D*> histRVsZ(kTypeOfTracks-2);//-2 because only for gen and track
 std::vector<std::array<bool,5>> mcLabelHasClustersInMFTDisks;
 int nCrossedDisksPerLabel = 0;
 
+TH1D *histCompteurDeMCLabel=0;
+
 //-----------------------------------------------------------------------------------------------
 
 void BookHistos();
 void loadMFTTracks(const Char_t *recoFileName = "mfttracks.root");
 bool IsTrackTrackable(std::array<bool,5> hasClusterInMFTDisks);
-std::pair<long long int, int> findEntryWithLargestValue(std::map<long long int, int> sampleMap);
+std::pair<uint64_t, int> findEntryWithLargestValue(std::map<uint64_t, int> sampleMap);
 
 
 
@@ -134,10 +136,10 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
 
 
   std::array<bool,5> boolClusterInMFTDisks={0,0,0,0,0};
-  std::vector<long long int> mcLabelTableRaw; //contains the raw values of the mcLabel which have at least one cluster
+  std::vector<uint64_t> mcLabelTableRaw; //contains the raw values of the mcLabel which have at least one cluster
   std::vector<o2::MCCompLabel> mcLabelTable; //contains the mcLabel which have at least one cluster
   std::vector<int> nClusterPerLabel;
-  std::vector<long long int>::iterator it; //iterator for the mcLabelTableRaw array
+  std::vector<uint64_t>::iterator it; //iterator for the mcLabelTableRaw array
 
 
 
@@ -228,7 +230,7 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
 
           auto ncls = mftTrack.getNumberOfPoints();
           auto offset = mftTrack.getExternalClusterIndexOffset();
-          std::map<long long int, int> mcLabels;
+          std::map<uint64_t, int> mcLabels;
           for (int icls = 0; icls < ncls; ++icls)//cluster loop 1
           {
             auto clsEntry = mtrackExtClsIDs[offset + icls];
@@ -247,7 +249,9 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
 
           }//end of cluster loop 1
 
-          std::pair<long long int, int> entryWithMaxValue = findEntryWithLargestValue(mcLabels);
+          histCompteurDeMCLabel->Fill(mcLabels.size());
+
+          std::pair<uint64_t, int> entryWithMaxValue = findEntryWithLargestValue(mcLabels);
 
 
 
@@ -342,6 +346,8 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
   //Write everything in one output file
   of.cd();
 
+  histCompteurDeMCLabel->Write();
+
   histPhiRecVsPhiGen->Write();
   histEtaRecVsEtaGen->Write();
 
@@ -410,15 +416,15 @@ bool IsTrackTrackable(std::array<bool,5> hasClusterInMFTDisks)
 
 // Function to find the Entry
 // with largest Value in a Map
-std::pair<long long int, int> findEntryWithLargestValue(std::map<long long int, int> sampleMap)
+std::pair<uint64_t, int> findEntryWithLargestValue(std::map<uint64_t, int> sampleMap)
 {
 
 	// Reference variable to help find
 	// the entry with the highest value
-	std::pair<long long int, int> entryWithMaxValue = std::make_pair(0, 0);
+	std::pair<uint64_t, int> entryWithMaxValue = std::make_pair(0, 0);
 
 	// Iterate in the map to find the required entry
-	std::map<long long int, int>::iterator currentEntry;
+	std::map<uint64_t, int>::iterator currentEntry;
 	for (currentEntry = sampleMap.begin(); currentEntry != sampleMap.end(); ++currentEntry)
   {
 
@@ -450,6 +456,9 @@ void BookHistos()
   histEtaRecVsEtaGen->SetXTitle((string("#eta of ")+nameOfTracks[kGen]).c_str());
   histEtaRecVsEtaGen->SetYTitle((string("#eta of ")+nameOfTracks[kRecoTrue]).c_str());
   histEtaRecVsEtaGen->Sumw2();
+
+  histCompteurDeMCLabel = new TH1D("histCompteurDeMCLabel","Compteur de MCLabel", 100, 0, 10);
+  histCompteurDeMCLabel->SetXTitle("nb de mcLabel par trace");
 
   for (int i = 0; i < kTypeOfTracks ; i++)
   {
