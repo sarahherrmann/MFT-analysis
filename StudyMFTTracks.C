@@ -24,9 +24,14 @@ std::vector<TH2D*> histRVsZ(kTypeOfTracks-2);//-2 because only for gen and track
 std::vector<std::array<bool,5>> mcLabelHasClustersInMFTDisks;
 int nCrossedDisksPerLabel = 0;
 
-TH1D *histCompteurDeMCLabel=0;
+
 
 //-----------------------------------------------------------------------------------------------
+
+TH1D *histCompteurDeMCLabel=0, *histPtOfPrimary=0, *histPOfPrimary=0, *histEtaOfVeryLowPPrimary=0;
+TH1D *histPxOfVeryLowPPrimary=0, *histPyOfVeryLowPPrimary=0, *histPzOfVeryLowPPrimary=0;
+TH1I *histPdgOfVeryLowPPrimary=0;
+//---------------------------------------------------------------------------------------
 
 void BookHistos();
 void loadMFTTracks(const Char_t *recoFileName = "mfttracks.root");
@@ -61,6 +66,8 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
   //-------------------------GENERATED TRACKS-----------------------------------
 
   Int_t nEvents = kineTree->GetEntries();
+  double charge;
+  long pdgCode;
 
   for (Int_t event = 0; event < nEvents ; event++)
   {
@@ -75,8 +82,18 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
       phi[kGen]  = thisTrackGen->GetPhi();
       z[kGen]    = thisTrackGen->GetStartVertexCoordinatesZ();
       R[kGen]    = sqrt(pow(thisTrackGen->GetStartVertexCoordinatesX(),2)+pow(thisTrackGen->GetStartVertexCoordinatesY(),2));
+      pdgCode = thisTrackGen->GetPdgCode();
+      if (TDatabasePDG::Instance()->GetParticle(pdgCode))
+      {
+        charge = TMath::Abs(TDatabasePDG::Instance()->GetParticle(pdgCode)->Charge());
+      }
+      else
+      {
+        //printf("strange pdgCode = %ld\n", pdgCode);
+        charge = 0;
+      }
 
-      if ((R[kGen]<0.2) && (TMath::Abs(z[kGen])<20))//coupure sur l'origine de la trace
+      if ((thisTrackGen->isPrimary()) && (charge>0.1))//coupure sur l'origine de la trace et particule chargée
       {
         histPtVsEta[kGen]  ->Fill(eta[kGen],pt[kGen]);
         histPhiVsEta[kGen] ->Fill(eta[kGen],phi[kGen]);
@@ -84,7 +101,21 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
         histZvtxVsEta[kGen]->Fill(eta[kGen],zVtx[kGen]);
         histRVsZ[kGen]     ->Fill(z[kGen],R[kGen]);
       }
-
+      if(thisTrackGen->isPrimary())
+      {
+        histPtOfPrimary ->Fill(pt[kGen]);
+        histPOfPrimary ->Fill(thisTrackGen->GetP());
+        if (TMath::Abs(pdgCode)==13){printf("Un muon ! %ld\n", pdgCode);}
+        //if((pt[kGen]<0.005)&&(thisTrackGen->GetEta()<1000000000000000019884624838655.0))
+        if((pt[kGen]<0.005)&&(charge>0.1))
+        {
+          histEtaOfVeryLowPPrimary->Fill(thisTrackGen->GetEta());
+          histPxOfVeryLowPPrimary->Fill(thisTrackGen->GetStartVertexMomentumX());
+          histPyOfVeryLowPPrimary->Fill(thisTrackGen->GetStartVertexMomentumY());
+          histPzOfVeryLowPPrimary->Fill(thisTrackGen->GetStartVertexMomentumZ());
+          histPdgOfVeryLowPPrimary->Fill(thisTrackGen->GetPdgCode());
+        }
+      }
 
       //end of loop on trkIDs
     }
@@ -322,7 +353,7 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
             histPhiVsEta[kRecoTrue]->Fill(eta[kRecoTrue], phi[kRecoTrue]);
 
           }
-
+          z[kReco]=mftTrack.getZ();
           eta[kReco]=-1*mftTrack.getEta();
 
           if (mftTrack.getPhi()>=TMath::Pi()/2)
@@ -347,6 +378,14 @@ void StudyMFTTracks(const Char_t *ofname = "outputfile_studyTracks.root", const 
   of.cd();
 
   histCompteurDeMCLabel->Write();
+  histPtOfPrimary->Write();
+  histPOfPrimary->Write();
+
+  histEtaOfVeryLowPPrimary->Write();
+  histPxOfVeryLowPPrimary->Write();
+  histPyOfVeryLowPPrimary->Write();
+  histPzOfVeryLowPPrimary->Write();
+  histPdgOfVeryLowPPrimary->Write();
 
   histPhiRecVsPhiGen->Write();
   histEtaRecVsEtaGen->Write();
@@ -459,6 +498,27 @@ void BookHistos()
 
   histCompteurDeMCLabel = new TH1D("histCompteurDeMCLabel","Compteur de MCLabel", 100, 0, 10);
   histCompteurDeMCLabel->SetXTitle("nb de mcLabel par trace");
+
+  histPtOfPrimary = new TH1D("histPtOfPrimary","Transverse momentum of primary tracks", 1000, 0, 1.0);
+  histPtOfPrimary->SetXTitle("p_{T} (GeV/c)");
+
+  histPOfPrimary = new TH1D("histPOfPrimary","Momentum of primary tracks", 1000, 0, 1.0);
+  histPOfPrimary->SetXTitle("p (GeV/c)");
+
+  histEtaOfVeryLowPPrimary = new TH1D("histEtaOfVeryLowPPrimary","#eta of very low momentum primary tracks", 1000,-20, 20);
+  histEtaOfVeryLowPPrimary->SetXTitle("#eta");
+
+  histPxOfVeryLowPPrimary = new TH1D("histPxOfVeryLowPPrimary","#p_x of very low momentum primary tracks", 1000,-10, 10);
+  histPxOfVeryLowPPrimary->SetXTitle("#p_{x}");
+
+  histPyOfVeryLowPPrimary = new TH1D("histPyOfVeryLowPPrimary","#p_x of very low momentum primary tracks", 1000,-10, 10);
+  histPyOfVeryLowPPrimary->SetXTitle("#p_{y}");
+
+  histPzOfVeryLowPPrimary = new TH1D("histPzOfVeryLowPPrimary","#p_x of very low momentum primary tracks", 2000,-900, 900);
+  histPzOfVeryLowPPrimary->SetXTitle("#p_{z}");
+
+  histPdgOfVeryLowPPrimary = new TH1I("histPdgOfVeryLowPPrimary","#p_x of very low momentum primary tracks", 4000,-2000, 5000);
+  histPdgOfVeryLowPPrimary->SetXTitle("pdgCode");
 
   for (int i = 0; i < kTypeOfTracks ; i++)
   {
