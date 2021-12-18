@@ -33,6 +33,12 @@ struct analyseMFTTracks {
       {"NtrkZvtx", "; N_{trk}; Z_{vtx}; events", {HistType::kTH2F, {{301, -0.5, 300.5}, {201, -20.1, 20.1}}}},       //
       {"NtrkEta", "#eta; N_{trk}; events", {HistType::kTH1F, {{35, -4.5, -1.}}}},                                    //
       {"TracksXLastClsYLastCls", "; x_{LastCls}; y_{LastCls}; tracks", {HistType::kTH2F, {{200, -40, 40.}, {200, -40, 40.}}}},        //
+      {"TracksXLastClsYLastCls_firstFace", "; x_{LastCls}; y_{LastCls}; tracks", {HistType::kTH2F, {{200, -40, 40.}, {200, -40, 40.}}}},        //
+      {"TracksXLastClsYLastCls_secondFace", "; x_{LastCls}; y_{LastCls}; tracks", {HistType::kTH2F, {{200, -40, 40.}, {200, -40, 40.}}}},
+      {"TracksPhiEta_LastCls", "; #varphi; #eta; tracks", {HistType::kTH2F, {{600, -M_PI, M_PI}, {35, -4.5, -1.}}}}, //
+      {"TracksPhiEta_LastClsLastDisk", "; #varphi; #eta; tracks", {HistType::kTH2F, {{600, -M_PI, M_PI}, {35, -4.5, -1.}}}}, //
+      {"TracksPhiEta_LastClsLastDisk_firstFace", "; #varphi; #eta; tracks", {HistType::kTH2F, {{600, -M_PI, M_PI}, {35, -4.5, -1.}}}}, //
+      {"TracksPhiEta_LastClsLastDisk_secondFace", "; #varphi; #eta; tracks", {HistType::kTH2F, {{600, -M_PI, M_PI}, {35, -4.5, -1.}}}}, //
       {"TracksPhiEtaGen", "; #varphi; #eta; tracks", {HistType::kTH2F, {{600, 0, 2 * M_PI}, {35, -4.5, -1.}}}},      //
       {"TracksEtaZvtxGen", "; #eta; Z_{vtx}; tracks", {HistType::kTH2F, {{35, -4.5, -1.}, {201, -20.1, 20.1}}}},     //
       {"NtrkZLastCls", "z_{LastCls}; count; events", {HistType::kTH1F, {{26, -79, -66}}}},
@@ -46,13 +52,34 @@ struct analyseMFTTracks {
 
     auto z = collision.posZ();
     registry.fill(HIST("NtrkZvtx"), tracks.size(), z);
-    double zLastCls = 0;
+    TVector3 v;
 
     for (auto& track : tracks) {
+      double zLastCls = track.z();
+      v.SetXYZ(track.x(),track.y(),zLastCls);
+      double etaLastCls = v.Eta();
+      double phiLastCls = v.Phi();
       registry.fill(HIST("TracksPhiEta_in_coll"), track.phi(), track.eta());
       registry.fill(HIST("TracksEtaZvtx"), track.eta(), z);
       registry.fill(HIST("NtrkEta"), track.eta());
-      registry.fill(HIST("TracksXLastClsYLastCls"), track.x(), track.y());
+      if (zLastCls < -70)
+      {
+        registry.fill(HIST("TracksXLastClsYLastCls"), track.x(), track.y());
+        registry.fill(HIST("TracksPhiEta_LastClsLastDisk"), phiLastCls, etaLastCls);
+
+        if (zLastCls > -77)//first face
+        {
+          registry.fill(HIST("TracksXLastClsYLastCls_firstFace"), track.x(), track.y());
+          registry.fill(HIST("TracksPhiEta_LastClsLastDisk_firstFace"), phiLastCls, etaLastCls);
+        }
+
+      }
+      if (zLastCls < -77)//second face
+      {
+        registry.fill(HIST("TracksXLastClsYLastCls_secondFace"), track.x(), track.y());
+        registry.fill(HIST("TracksPhiEta_LastClsLastDisk_secondFace"), phiLastCls, etaLastCls);
+      }
+      registry.fill(HIST("TracksPhiEta_LastCls"), phiLastCls, etaLastCls);
       registry.fill(HIST("NtrkZLastCls"), track.z());
     }
     icoll++;
@@ -67,7 +94,8 @@ struct analyseMFTTracks {
     auto z = mcCollision.posZ();
 
     for (auto& particle : particles) {
-      auto p = pdg->GetParticle(particle.pdgCode());
+      //auto p = pdg->GetParticle(particle.pdgCode());
+      auto p = TDatabasePDG::Instance()->GetParticle(particle.pdgCode());
       int charge = 0;
       if (p == nullptr) {
         // unknown particles will be skipped
@@ -94,7 +122,7 @@ struct analyseMFTTracks {
     //registry.fill(HIST("NtrkZvtxGen"), nChargedPrimaryParticles, mcCollision.posZ());
   }
 
-  PROCESS_SWITCH(analyseMFTTracks, processGen, "Process gen level", true);
+  PROCESS_SWITCH(analyseMFTTracks, processGen, "Process gen level", false);
 };
 //end of the task analyseMFTTracks
 
